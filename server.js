@@ -27,8 +27,19 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.CLIENT_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS not allowed for origin: ${origin}`));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -42,11 +53,11 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // ── Routes ─────────────────────────────────────────────────────────
-app.use('/api/auth',     authRoutes);
-app.use('/api/courses',  courseRoutes);
-app.use('/api/enroll',   enrollRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/courses', courseRoutes);
+app.use('/api/enroll', enrollRoutes);
 app.use('/api/checkout', checkoutRoutes);
-app.use('/api/chat',     chatRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/api/progress', progressRoutes);
 
 // ── Health Check ───────────────────────────────────────────────────
@@ -74,7 +85,10 @@ app.use((err, req, res, next) => {
 
 // ── 404 Handler ────────────────────────────────────────────────────
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found`,
+  });
 });
 
 // ── Database + Server Start ────────────────────────────────────────
@@ -94,7 +108,7 @@ const connectDB = async () => {
 
 connectDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   });
 });
