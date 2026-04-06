@@ -18,24 +18,16 @@ dotenv.config();
 
 const app = express();
 
-// ── Security & Middleware ──────────────────────────────────────────
+// Security & Middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  process.env.CLIENT_URL,
-].filter(Boolean);
-
 const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS not allowed for origin: ${origin}`));
-    }
-  },
+  origin: [
+    'http://localhost:5173',
+    'https://platform-client-black-five.vercel.app',
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -51,7 +43,7 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// ── Routes ─────────────────────────────────────────────────────────
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/enroll', enrollRoutes);
@@ -59,7 +51,7 @@ app.use('/api/checkout', checkoutRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/progress', progressRoutes);
 
-// ── Health Check ───────────────────────────────────────────────────
+// Health Check
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -68,7 +60,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// ── Global Error Handler ───────────────────────────────────────────
+// Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Global error:', err.stack);
 
@@ -82,7 +74,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ── 404 Handler ────────────────────────────────────────────────────
+// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -90,7 +82,7 @@ app.use((req, res) => {
   });
 });
 
-// ── Database + Server Start ────────────────────────────────────────
+// Database + Server Start
 const PORT = process.env.PORT || 5000;
 
 const connectDB = async () => {
