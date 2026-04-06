@@ -6,7 +6,6 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 
-// Route imports
 import authRoutes from './routes/auth.js';
 import courseRoutes from './routes/courses.js';
 import enrollRoutes from './routes/enroll.js';
@@ -18,11 +17,6 @@ dotenv.config();
 
 const app = express();
 
-// Security & Middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
-
 const corsOptions = {
   origin: [
     'http://localhost:5173',
@@ -33,8 +27,11 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -43,7 +40,6 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/enroll', enrollRoutes);
@@ -51,7 +47,6 @@ app.use('/api/checkout', checkoutRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/progress', progressRoutes);
 
-// Health Check
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -60,7 +55,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Global error:', err.stack);
 
@@ -74,7 +68,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -82,14 +75,11 @@ app.use((req, res) => {
   });
 });
 
-// Database + Server Start
 const PORT = process.env.PORT || 5000;
 
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      dbName: 'learnpro',
-    });
+    await mongoose.connect(process.env.MONGO_URI, { dbName: 'learnpro' });
     console.log('✅ MongoDB connected — learnpro database');
   } catch (err) {
     console.error('❌ MongoDB connection failed:', err.message);
