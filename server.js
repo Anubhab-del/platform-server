@@ -1,12 +1,11 @@
 import 'express-async-errors';
-import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import dotenv from 'dotenv';
-import path from 'path';
+import express    from 'express';
+import mongoose   from 'mongoose';
+import helmet     from 'helmet';
+import morgan     from 'morgan';
+import dotenv     from 'dotenv';
 import { fileURLToPath } from 'url';
+import path from 'path';
 
 import authRoutes     from './routes/auth.js';
 import courseRoutes   from './routes/courses.js';
@@ -17,46 +16,53 @@ import progressRoutes from './routes/progress.js';
 
 dotenv.config();
 
-const app = express();
+const app       = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
-// ── CORS ───────────────────────────────────────────────────────────
-// Must be registered BEFORE helmet and all routes.
-// The OPTIONS preflight must also be handled explicitly.
+// ── Manual CORS — set headers on EVERY response ────────────────────
+// This runs before everything else and cannot be overridden by helmet
+// or any middleware down the chain.
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  process.env.CLIENT_URL,
-].filter(Boolean);
+  const allowed = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.CLIENT_URL || '',
+  ].filter(Boolean);
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests with no origin (Postman, curl, server-to-server)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-  ],
-  optionsSuccessStatus: 200, // Some browsers (IE11) choke on 204
-};
+  // If the request has an origin header and it is in our list, echo it back.
+  // If there is no origin (Postman, server-to-server), allow wildcard.
+  if (origin && allowed.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  } else {
+    // Still set the header so the browser gets a useful error, not a network error
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
 
-// Handle every OPTIONS preflight request immediately
-app.options('*', cors(corsOptions));
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+  );
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+  );
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24h
 
-// Apply CORS to all routes
-app.use(cors(corsOptions));
+  // Preflight — respond immediately with 200, do not go further
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
 
-// ── Security & Middleware ──────────────────────────────────────────
+  next();
+});
+
+// ── Security ───────────────────────────────────────────────────────
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -66,7 +72,7 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-if (process.env.NODE_ENV === 'development') {
+if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
@@ -78,12 +84,12 @@ app.use('/api/checkout', checkoutRoutes);
 app.use('/api/chat',     chatRoutes);
 app.use('/api/progress', progressRoutes);
 
-// ── Health check ───────────────────────────────────────────────────
+// ── Health ─────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({
-    status:      'ok',
-    environment: process.env.NODE_ENV,
-    timestamp:   new Date().toISOString(),
+    status:    'ok',
+    env:       process.env.NODE_ENV,
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -97,42 +103,34 @@ app.use((req, res) => {
 
 // ── Global error handler ───────────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error('Global error:', err.stack);
+  console.error('Server error:', err.message);
 
-  // Do not override CORS headers on error responses
-  res.header('Access-Control-Allow-Origin',  req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  // Re-stamp CORS headers so error responses are never blocked
+  const origin = req.headers.origin;
+  if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-  const status  = err.statusCode || err.status || 500;
-  const message = err.message || 'Internal server error';
-
-  res.status(status).json({
+  res.status(err.statusCode || err.status || 500).json({
     success: false,
-    message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    message: err.message || 'Internal server error',
   });
 });
 
-// ── Database + Server Start ────────────────────────────────────────
+// ── Start ──────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, { dbName: 'learnpro' });
-    console.log('✅ MongoDB connected — learnpro database');
-  } catch (err) {
-    console.error('❌ MongoDB connection failed:', err.message);
+mongoose
+  .connect(process.env.MONGO_URI, { dbName: 'learnpro' })
+  .then(() => {
+    console.log('✅ MongoDB connected');
+    app.listen(PORT, () => {
+      console.log(`🚀 Server on port ${PORT}`);
+      console.log(`CLIENT_URL = ${process.env.CLIENT_URL}`);
+    });
+  })
+  .catch((err) => {
+    console.error('❌ MongoDB failed:', err.message);
     process.exit(1);
-  }
-};
-
-connectDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
-    console.log(`✅ Allowed origins: ${allowedOrigins.join(', ')}`);
   });
-});
 
 export default app;
