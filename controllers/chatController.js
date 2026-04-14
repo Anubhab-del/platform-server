@@ -1,5 +1,7 @@
 // POST /api/chat
 export const chat = async (req, res) => {
+   console.log('GROQ KEY present:', !!process.env.GROQ_API_KEY);
+  console.log('GROQ KEY starts with:', process.env.GROQ_API_KEY?.slice(0, 8));
   const { messages } = req.body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
